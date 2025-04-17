@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Word Translator Tool</title>
+  <title>Example Sentence Finder</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 2em; }
     h1 { color: #333; }
@@ -12,34 +12,42 @@
   </style>
 </head>
 <body>
-  <h1>Word Translator Tool (via Google API)</h1>
-  <label for="apiKey">Google API Key:</label>
-  <input type="text" id="apiKey" placeholder="Enter your Google API key" />
+  <h1>Example Sentence Finder (Merriam-Webster API)</h1>
+  <label for="apiKey">Merriam-Webster API Key:</label>
+  <input type="text" id="apiKey" placeholder="Enter your MW API key" />
   <input type="file" id="fileInput" accept=".csv, .xlsx" />
   <button onclick="handleFile()">読み込む</button>
   <div id="output"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script>
-    async function translateText(text, apiKey) {
-      const url = `https://translation.googleapis.com/language/translate/v2`;
-      const params = new URLSearchParams({
-        q: text,
-        target: 'ja',
-        source: 'en',
-        format: 'text',
-        key: apiKey
-      });
-
+    async function fetchExampleSentence(word, apiKey) {
+      const url = `https://www.dictionaryapi.com/api/v3/references/collegiate/json/${encodeURIComponent(word)}?key=${apiKey}`;
       try {
-        const response = await fetch(url, {
-          method: 'POST',
-          body: params
-        });
+        const response = await fetch(url);
         const data = await response.json();
-        return data.data.translations[0].translatedText;
+
+        if (Array.isArray(data) && data[0] && data[0].def) {
+          const defs = data[0].def;
+          for (const d of defs) {
+            for (const sseq of d.sseq || []) {
+              for (const seq of sseq) {
+                const sense = seq[1];
+                if (sense.dt) {
+                  for (const dt of sense.dt) {
+                    if (dt[0] === 'vis' && dt[1][0] && dt[1][0].t) {
+                      // Replace {it} tags with bold or nothing
+                      return dt[1][0].t.replace(/{[^}]+}/g, '');
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        return '(例文が見つかりません)';
       } catch (error) {
-        return '(翻訳失敗)';
+        return '(APIエラー)';
       }
     }
 
@@ -61,8 +69,8 @@
         let output = '';
         for (const row of json) {
           const word = row["Word"];
-          const meaning = await translateText(word, apiKey);
-          output += `${word} → ${meaning}\n`;
+          const example = await fetchExampleSentence(word, apiKey);
+          output += `${word} → ${example}\n`;
         }
         document.getElementById('output').textContent = output;
       };
